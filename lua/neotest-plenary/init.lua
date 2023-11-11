@@ -92,6 +92,33 @@ function PlenaryNeotestAdapter.build_spec(args)
     end
   end
   local min_init = config.min_init
+
+  --- @param path string
+  --- @return boolean
+  local function is_git_ignored(path)
+    -- read .gitignore and convert it to a list of globs
+    local success, gitignore = pcall(lib.files.read, ".gitignore")
+    if not success then
+      return false
+    end
+
+    local git_ignore_globs = {}
+    for line in gitignore:gmatch("[^\r\n]+") do
+      if line:sub(1, 1) ~= "#" then
+        -- replace separators
+        line = string.gsub(line, "/", lib.files.sep)
+        table.insert(git_ignore_globs, line)
+      end
+    end
+    local _path = vim.fn.fnamemodify(path, ":p")
+    for _, glob in ipairs(git_ignore_globs) do
+      if string.find(_path, glob) then
+        return true
+      end
+    end
+    return false
+  end
+
   if not min_init then
     local globs = {
       ("**%stestrc*"):format(lib.files.sep),
@@ -100,9 +127,11 @@ function PlenaryNeotestAdapter.build_spec(args)
     }
     for _, pattern in ipairs(globs) do
       local glob_matches = async.fn.glob(pattern, true, true)
-      if #glob_matches > 0 then
-        min_init = glob_matches[1]
-        break
+      for _, path in ipairs(glob_matches) do
+        if not is_git_ignored(path) then
+          min_init = path
+          break
+        end
       end
     end
   end
